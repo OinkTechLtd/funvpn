@@ -1,77 +1,25 @@
-name:  FunVPN Proxy Robot
-
+name: Keep VPN Alive
 on:
-  # Каждый день в 03:00 UTC (06:00 МСК)
   schedule:
-    - cron: "0 3 * * *"
-
-  # Запуск вручную из вкладки Actions
+    - cron: '*/30 * * * *'
   workflow_dispatch:
-    inputs:
-      force_update:
-        description: "Принудительное обновление (yes/no)"
-        required: false
-        default: "yes"
-
-# Права на запись в репо (нужно для git push)
-permissions:
-  contents: write
-
 jobs:
-  update-proxies:
-    name: Collect & Check Proxies
+  refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
     steps:
-      # ── 1. Чекаут репозитория ──────────────────
-      - name: ߓ Checkout repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          fetch-depth: 1
-
-      # ── 2. Python ─────────────────────────────
-      - name: ߐ Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-
-      # ── 3. Зависимости ────────────────────────
-      - name: ߓ Install dependencies
-        run: |
-          pip install --upgrade pip
-          pip install aiohttp aiohttp-socks
-
-      # ── 4. Запуск робота ──────────────────────
-      - name: ߤ Run Proxy Robot
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Collect Proxies
         run: python scripts/collect_proxies.py
-
-      # ── 5. Показать итог ──────────────────────
-      - name: ߓ Show update log
+      - name: Commit changes
         run: |
-          echo "──────────────────────────────"
-          cat configs/last_update.log
-          echo "──────────────────────────────"
-          echo "Строк в конфиге: $(wc -l < configs/free_config.txt)"
-
-      # ── 6. Коммит обновлённых файлов ──────────
-      - name: ߒ Commit updated configs
-        run: |
-          git config user.name  "FunVPN Robot"
-          git config user.email "robot@funvpn.local"
-
-          git add configs/free_config.txt
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
           git add configs/proxies.json
-          git add configs/last_update.log
-
-          # Коммитим только если есть изменения
-          if git diff --cached --quiet; then
-            echo "⏭️  Изменений нет — коммит пропущен"
-          else
-            ALIVE=$(grep -c "^http\|^socks" configs/free_config.txt || true)
-            DATE=$(date -u "+%Y-%m-%d %H:%M UTC")
-            git commit -m "ߤ [Robot] Обновление прокси: ${ALIVE} серверов | ${DATE}"
-            git push
-            echo "✅ Изменения запушены"
-          fi
+          git commit -m "Update dead proxies" || exit 0
+          git push
